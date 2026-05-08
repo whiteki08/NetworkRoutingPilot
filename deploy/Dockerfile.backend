@@ -18,8 +18,23 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 FROM debian:bookworm-slim
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends libpcap0.8 ca-certificates tini iproute2 \
+  && apt-get install -y --no-install-recommends libpcap0.8 ca-certificates tini iproute2 curl \
   && rm -rf /var/lib/apt/lists/*
+
+# Install nexttrace — the probe backend delegates all traceroute mechanics to it.
+# Pinning to a specific release tag avoids surprise behavior changes.
+ARG NEXTTRACE_VERSION=v1.6.4
+ARG TARGETARCH=amd64
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+      amd64) asset=nexttrace_linux_amd64 ;; \
+      arm64) asset=nexttrace_linux_arm64 ;; \
+      *) echo "unsupported arch ${TARGETARCH}"; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/nxtrace/NTrace-core/releases/download/${NEXTTRACE_VERSION}/${asset}" -o /usr/local/bin/nexttrace; \
+    chmod +x /usr/local/bin/nexttrace; \
+    /usr/local/bin/nexttrace -V || true
+
 WORKDIR /app
 COPY --from=builder /out/pbr-server /usr/local/bin/pbr-server
 COPY config /app/config

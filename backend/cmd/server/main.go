@@ -44,11 +44,22 @@ func main() {
 	dohResolver := resolver.NewDoHResolver(cfg.DoHEndpoint, cfg.DoHBootstrapIPs)
 
 	var prober probe.Prober
-	if strings.EqualFold(cfg.ProbeMode, "mock") {
+	switch strings.ToLower(strings.TrimSpace(cfg.ProbeMode)) {
+	case "mock", "":
 		logger.Printf("probe mode=mock; using synthetic hops")
 		prober = mockProber()
-	} else {
-		prober = probe.NewPcapProber(cfg.ProbeInterface)
+	case "tcp", "udp", "icmp", "nexttrace":
+		mode := strings.ToLower(cfg.ProbeMode)
+		if mode == "nexttrace" {
+			mode = "icmp"
+		}
+		logger.Printf("probe mode=%s; using nexttrace backend", mode)
+		prober = probe.NewNexttraceProber(mode, cfg.ProbeInterface)
+	default:
+		// Legacy "pcap" value and anything else falls back to nexttrace ICMP,
+		// which works on more networks than raw TCP.
+		logger.Printf("probe mode=%s unrecognized; falling back to nexttrace icmp", cfg.ProbeMode)
+		prober = probe.NewNexttraceProber("icmp", cfg.ProbeInterface)
 	}
 
 	ripeClient, ripeCloser := buildRIPE(cfg, logger)
