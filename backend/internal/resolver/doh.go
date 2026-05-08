@@ -124,21 +124,42 @@ func bootstrapTransport(endpoint string, bootstrapIPs []string, insecure bool) h
 	}
 	host := parsed.Hostname()
 	dialer := &net.Dialer{Timeout: 6 * time.Second, KeepAlive: 30 * time.Second}
-	return &http.Transport{
+	t := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
-		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-			reqHost, port, err := net.SplitHostPort(address)
-			if err != nil || reqHost != host {
-				return dialer.DialContext(ctx, network, address)
-			}
-			ip := bootstrapIPs[rand.Intn(len(bootstrapIPs))]
-			return dialer.DialContext(ctx, network, net.JoinHostPort(ip, port))
-		},
 		TLSClientConfig: &tls.Config{
 			MinVersion:         tls.VersionTLS12,
 			InsecureSkipVerify: insecure, //nolint:gosec // opt-in for private DoH servers with mismatched certs
 		},
 	}
+	// DialTLSContext lets us set ServerName per-connection: when we dial by
+	// bootstrap IP the cert may only have IP SANs (no hostname SAN), so we
+	// tell Go to verify against the IP string rather than the URL hostname.
+	t.DialTLSContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		reqHost, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, err
+		}
+		dialAddr := address
+		serverName := reqHost
+		if reqHost == host {
+			ip := bootstrapIPs[rand.Intn(len(bootstrapIPs))]
+			dialAddr = net.JoinHostPort(ip, port)
+			serverName = ip // verify IP SAN, not hostname
+		}
+		tlsCfg := t.TLSClientConfig.Clone()
+		tlsCfg.ServerName = serverName
+		conn, err := dialer.DialContext(ctx, network, dialAddr)
+		if err != nil {
+			return nil, err
+		}
+		tlsConn := tls.Client(conn, tlsCfg)
+		if err := tlsConn.HandshakeContext(ctx); err != nil {
+			conn.Close()
+			return nil, err
+		}
+		return tlsConn, nil
+	}
+	return t
 }
 
 type StaticResolver struct {
