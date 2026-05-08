@@ -66,6 +66,8 @@ services:
     cap_add:
       - NET_RAW
       - NET_ADMIN
+    volumes:
+      - ../config/geoip:/app/config/geoip:ro
 
   pbr_frontend:
     build:

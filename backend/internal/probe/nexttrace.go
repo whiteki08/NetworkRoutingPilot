@@ -79,7 +79,7 @@ func (p *NexttraceProber) Probe(ctx context.Context, target Target) ([]model.Hop
 	if maxHops <= 0 {
 		maxHops = 30
 	}
-	args := []string{"-4", "-j", "-n", "-M", "--table=false"}
+	args := []string{"-4", "-j", "-n", "-M", "--table=false", "-d", "disable-geoip"}
 	switch p.Mode {
 	case "tcp":
 		args = append(args, "-T")
