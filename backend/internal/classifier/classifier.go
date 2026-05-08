@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"net"
 	"strings"
 	"time"
 
@@ -61,7 +62,7 @@ var foreignTransitAS = map[uint]bool{
 }
 
 func Classify(domain string, resolvedIPv4 string, hops []model.Hop) model.TraceResult {
-	status, metrics := classifyPath(hops)
+	status, metrics := classifyPath(resolvedIPv4, hops)
 	return model.TraceResult{
 		TargetDomain:         domain,
 		ResolvedIPv4:         resolvedIPv4,
@@ -72,7 +73,7 @@ func Classify(domain string, resolvedIPv4 string, hops []model.Hop) model.TraceR
 	}
 }
 
-func classifyPath(hops []model.Hop) (model.ClassificationStatus, model.PathMetrics) {
+func classifyPath(resolvedIPv4 string, hops []model.Hop) (model.ClassificationStatus, model.PathMetrics) {
 	metrics := buildMetrics(hops)
 
 	// Order matters: check for dedicated-circuit signatures (IEPL, CN2)
@@ -86,13 +87,13 @@ func classifyPath(hops []model.Hop) (model.ClassificationStatus, model.PathMetri
 			return model.StatusCN2Premium, metrics
 		}
 	}
-	if isIEPLDirect(hops, &metrics) {
+	if isIEPLDirect(hops, &metrics) || isIEPLPrivateEgress(hops, &metrics) {
 		return model.StatusIEPLDirect, metrics
 	}
 	if containsAnyAS(metrics.ASNSequence, cernetAS) {
 		return model.StatusCernetDetour, metrics
 	}
-	if isBlocked(hops) {
+	if isBlocked(resolvedIPv4, hops) {
 		return model.StatusBlocked, metrics
 	}
 	return model.StatusStandard163, metrics
@@ -181,22 +182,112 @@ func isChineseCarrierBorder(hops []model.Hop, metrics *model.PathMetrics) bool {
 	return false
 }
 
-func isBlocked(hops []model.Hop) bool {
+// isBlocked returns true only when the trace clearly failed to reach the
+// destination. Intermediate silent hops are normal (ICMP rate-limiting on
+// many backbone routers), so we don't penalize them — what matters is
+// whether the trace eventually landed on the resolved destination IP.
+//
+// Rules:
+//  1. If any responded hop's IP equals the resolved destination, the path
+//     reached the target → not blocked.
+//  2. Otherwise, if zero hops responded at all → blocked.
+//  3. Otherwise, if the last few hops are all silent (no response near the
+//     tail of the trace), treat it as blocked — the path trailed off.
+// isIEPLPrivateEgress detects the corporate-IEPL pattern where the trace
+// leaves a private/RFC1918 LAN inside mainland China and the first public
+// hop is already overseas, with no Chinese public-carrier AS in the path.
+// That signature — private hops, then a direct jump into a foreign AS —
+// is produced by a dedicated L2 circuit (IEPL/IPLC) carrying corp traffic
+// straight to an overseas PoP, bypassing the public 163/CN2/CERNET backbones.
+//
+// Rules:
+//  1. At least one early hop is RFC1918/RFC6598 (private) or unresponded.
+//  2. The first *public* responded hop has a non-CN country and a non-zero
+//     RTT below ieplPrivateEgressMaxRTTMS (pure fiber from mainland to the
+//     nearest overseas hub is typically <60ms, certainly <100ms).
+//  3. No Chinese public-carrier AS (4134/4809/9929/4837/CERNET/etc.) appears
+//     anywhere in the AS sequence — if one did, the path is using a public
+//     CN backbone and is not IEPL.
+//  4. No foreign tier-1 transit appears before the first overseas hop.
+func isIEPLPrivateEgress(hops []model.Hop, metrics *model.PathMetrics) bool {
+	// Rule 3: any Chinese public-carrier AS anywhere → not this pattern.
+	for _, asn := range metrics.ASNSequence {
+		if chinaCarrierOverseasAS[asn] || cernetAS[asn] {
+			return false
+		}
+	}
+	sawPrivate := false
+	for _, hop := range hops {
+		if !hop.Responded {
+			continue
+		}
+		ip := net.ParseIP(hop.IP)
+		if ip == nil {
+			continue
+		}
+		if isPrivateOrSharedIP(ip) {
+			sawPrivate = true
+			continue
+		}
+		// First public responded hop.
+		if strings.EqualFold(hop.CountryCode, "CN") || hop.CountryCode == "" {
+			return false
+		}
+		if hop.RTTMS <= 0 || hop.RTTMS > ieplPrivateEgressMaxRTTMS {
+			return false
+		}
+		if !sawPrivate {
+			return false
+		}
+		metrics.BorderDeltaMS = hop.RTTMS
+		return true
+	}
+	return false
+}
+
+// ieplPrivateEgressMaxRTTMS caps the RTT to the first overseas public hop.
+// Dedicated fibre from mainland China to HK/SG is typically 30-50ms; public
+// transit routinely adds 50ms+ of queueing. 80ms leaves room for Tokyo/US-West
+// landing points while still rejecting clearly-detoured paths.
+const ieplPrivateEgressMaxRTTMS = 80.0
+
+func isPrivateOrSharedIP(ip net.IP) bool {
+	if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+		return true
+	}
+	// RFC6598 shared address space (100.64.0.0/10) used by carrier-grade NAT
+	// and on many corp WAN edges; treat as private for this heuristic.
+	if ip4 := ip.To4(); ip4 != nil && ip4[0] == 100 && ip4[1] >= 64 && ip4[1] <= 127 {
+		return true
+	}
+	return false
+}
+
+func isBlocked(resolvedIPv4 string, hops []model.Hop) bool {
 	if len(hops) == 0 {
 		return true
 	}
-	consecutiveLoss := 0
+	anyResponded := false
 	for _, hop := range hops {
 		if hop.Responded {
-			consecutiveLoss = 0
-			continue
-		}
-		consecutiveLoss++
-		if consecutiveLoss >= 3 {
-			return true
+			anyResponded = true
+			if resolvedIPv4 != "" && hop.IP == resolvedIPv4 {
+				return false
+			}
 		}
 	}
-	return false
+	if !anyResponded {
+		return true
+	}
+	// Tail silence: if the last 5 hops are all unresponded and we never hit
+	// the destination IP, the path didn't complete.
+	tail := min(5, len(hops))
+	for i := len(hops) - tail; i < len(hops); i++ {
+		if hops[i].Responded {
+			return false
+		}
+	}
+	return true
 }
 
 func containsAnyAS(asns []uint, set map[uint]bool) bool {
