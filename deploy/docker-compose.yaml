@@ -52,10 +52,6 @@ services:
       MMDB_CITY_PATH: /app/config/geoip/GeoLite2-City.mmdb
       MMDB_ASN_PATH: /app/config/geoip/GeoLite2-ASN.mmdb
       RIPE_CACHE_TTL_HOURS: ${RIPE_CACHE_TTL_HOURS:-24}
-    # To enable real pcap probing, uncomment the three lines below and
-    # set PROBE_MODE=pcap. Requires the container to run on the host
-    # network with raw-socket privileges.
-    network_mode: host
     cap_add:
       - NET_RAW
       - NET_ADMIN
@@ -70,8 +66,6 @@ services:
     restart: unless-stopped
     depends_on:
       - pbr_backend
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     ports:
       - "8081:80"
 
