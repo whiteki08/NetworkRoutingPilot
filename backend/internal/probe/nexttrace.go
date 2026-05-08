@@ -62,7 +62,7 @@ func NewNexttraceProber(mode string, iface string) *NexttraceProber {
 	return &NexttraceProber{
 		Binary:    "nexttrace",
 		Mode:      strings.ToLower(mode),
-		Queries:   1,
+		Queries:   3,
 		Interface: iface,
 	}
 }
