@@ -45,8 +45,9 @@ services:
       PROBE_INTERFACE: ${PROBE_INTERFACE:-}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-32}
       MAX_TTL: ${MAX_TTL:-40}
-      DOH_ENDPOINT: ${DOH_ENDPOINT:-https://cloudflare-dns.com/dns-query}
-      DOH_BOOTSTRAP_IPS: ${DOH_BOOTSTRAP_IPS:-1.1.1.1,1.0.0.1}
+      DOH_ENDPOINT: ${DOH_ENDPOINT:-https://223.5.5.5/dns-query}
+      DOH_BOOTSTRAP_IPS: ${DOH_BOOTSTRAP_IPS:-223.5.5.5,223.6.6.6}
+      DOH_INSECURE: ${DOH_INSECURE:-false}
       DATABASE_URL: postgres://${POSTGRES_USER:-pbr}:${POSTGRES_PASSWORD:-pbr}@pbr_database:5432/${POSTGRES_DB:-pbr}?sslmode=disable
       REDIS_URL: redis://pbr_redis:6379/0
       MMDB_CITY_PATH: /app/config/geoip/GeoLite2-City.mmdb

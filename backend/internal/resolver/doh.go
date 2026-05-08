@@ -9,6 +9,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -42,11 +44,14 @@ func NewDoHResolver(endpoint string, bootstrapIPs []string) *DoHResolver {
 	if endpoint == "" {
 		endpoint = "https://cloudflare-dns.com/dns-query"
 	}
+	// DOH_INSECURE=true skips TLS verification — useful for private DoH servers
+	// whose cert doesn't match their hostname (e.g. wildcard on a different domain).
+	insecure := strings.EqualFold(strings.TrimSpace(os.Getenv("DOH_INSECURE")), "true")
 	return &DoHResolver{
 		endpoint: endpoint,
 		client: &http.Client{
 			Timeout:   8 * time.Second,
-			Transport: bootstrapTransport(endpoint, bootstrapIPs),
+			Transport: bootstrapTransport(endpoint, bootstrapIPs, insecure),
 		},
 		cacheTTL: 10 * time.Minute,
 		cache:    make(map[string]cacheEntry),
@@ -112,7 +117,7 @@ func (r *DoHResolver) saveCache(domain string, ip net.IP) {
 	r.cache[domain] = cacheEntry{ip: append(net.IP(nil), ip...), expiresAt: time.Now().Add(r.cacheTTL)}
 }
 
-func bootstrapTransport(endpoint string, bootstrapIPs []string) http.RoundTripper {
+func bootstrapTransport(endpoint string, bootstrapIPs []string, insecure bool) http.RoundTripper {
 	parsed, err := url.Parse(endpoint)
 	if err != nil || len(bootstrapIPs) == 0 {
 		return http.DefaultTransport
@@ -129,7 +134,10 @@ func bootstrapTransport(endpoint string, bootstrapIPs []string) http.RoundTrippe
 			ip := bootstrapIPs[rand.Intn(len(bootstrapIPs))]
 			return dialer.DialContext(ctx, network, net.JoinHostPort(ip, port))
 		},
-		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
+		TLSClientConfig: &tls.Config{
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: insecure, //nolint:gosec // opt-in for private DoH servers with mismatched certs
+		},
 	}
 }
 
