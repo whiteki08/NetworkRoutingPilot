@@ -1,0 +1,23 @@
+http_addr: ":8080"
+probe:
+  mode: pcap
+  interface: ""
+  worker_concurrency: 32
+  max_ttl: 40
+  timeout: "800ms"
+resolver:
+  doh_endpoint: "https://dns.google/dns-query"
+  bootstrap_ips:
+    - "8.8.8.8"
+    - "1.1.1.1"
+geoip:
+  city_mmdb: "/app/config/geoip/GeoLite2-City.mmdb"
+  asn_mmdb: "/app/config/geoip/GeoLite2-ASN.mmdb"
+classification:
+  iepl_asns: [4134, 4809, 58453]
+  cn2_asns: [4809]
+  cernet_asns: [4538]
+  china_telecom_asn: 4134
+ripe:
+  base_url: "https://stat.ripe.net/data/bgp-state/data.json"
+  cache_ttl: "24h"

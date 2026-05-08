@@ -1,0 +1,47 @@
+# Default: normalize line endings to LF on checkin, leave working-copy alone.
+* text=auto eol=lf
+
+# Explicit text files — always LF.
+*.go        text eol=lf
+*.mod       text eol=lf
+*.sum       text eol=lf
+*.ts        text eol=lf
+*.tsx       text eol=lf
+*.js        text eol=lf
+*.jsx       text eol=lf
+*.json      text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.css       text eol=lf
+*.html      text eol=lf
+*.md        text eol=lf
+*.sh        text eol=lf
+*.conf      text eol=lf
+Dockerfile* text eol=lf
+
+# Shell scripts should be executable on checkout.
+*.sh        text eol=lf
+
+# Binary assets — never try to diff/merge.
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.pdf       binary
+*.mmdb      binary
+*.woff      binary
+*.woff2     binary
+*.ttf       binary
+*.eot       binary
+
+# Lockfiles — merge=union avoids painful conflicts, and treat them as generated
+# so GitHub collapses them in PR diffs by default.
+go.sum              -diff merge=union linguist-generated=true
+package-lock.json   -diff merge=union linguist-generated=true
+yarn.lock           -diff merge=union linguist-generated=true
+pnpm-lock.yaml      -diff merge=union linguist-generated=true
+
+# Large vendored / sample inputs shouldn't inflate language stats.
+list.txt            linguist-generated=true
+trace_checkpoint.json linguist-generated=true

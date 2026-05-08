@@ -1,0 +1,74 @@
+services:
+  pbr_database:
+    image: postgres:16-alpine
+    container_name: pbr_database
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pbr}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pbr}
+      POSTGRES_DB: ${POSTGRES_DB:-pbr}
+    volumes:
+      - pbr_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pbr}"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  pbr_redis:
+    image: redis:7-alpine
+    container_name: pbr_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - pbr_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  pbr_backend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+    container_name: pbr_backend
+    restart: unless-stopped
+    depends_on:
+      pbr_database:
+        condition: service_healthy
+      pbr_redis:
+        condition: service_healthy
+    environment:
+      HTTP_ADDR: ":8080"
+      PROBE_MODE: ${PROBE_MODE:-mock}
+      PROBE_INTERFACE: ${PROBE_INTERFACE:-}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-32}
+      MAX_TTL: ${MAX_TTL:-40}
+      DOH_ENDPOINT: ${DOH_ENDPOINT:-https://cloudflare-dns.com/dns-query}
+      DOH_BOOTSTRAP_IPS: ${DOH_BOOTSTRAP_IPS:-1.1.1.1,1.0.0.1}
+      DATABASE_URL: postgres://${POSTGRES_USER:-pbr}:${POSTGRES_PASSWORD:-pbr}@pbr_database:5432/${POSTGRES_DB:-pbr}?sslmode=disable
+      REDIS_URL: redis://pbr_redis:6379/0
+      MMDB_CITY_PATH: /app/config/geoip/GeoLite2-City.mmdb
+      MMDB_ASN_PATH: /app/config/geoip/GeoLite2-ASN.mmdb
+      RIPE_CACHE_TTL_HOURS: ${RIPE_CACHE_TTL_HOURS:-24}
+    # Uncomment for real pcap probing; requires host network + NET_RAW.
+    # network_mode: host
+    # cap_add: [NET_RAW, NET_ADMIN]
+    ports:
+      - "8080:8080"
+
+  pbr_frontend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+    container_name: pbr_frontend
+    restart: unless-stopped
+    depends_on:
+      - pbr_backend
+    ports:
+      - "8081:80"
+
+volumes:
+  pbr_pg_data:
+  pbr_redis_data:

@@ -1,0 +1,60 @@
+# ── Environment / secrets ─────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Editors & OS ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Logs / temporary files ────────────────────────────────────────────
+*.log
+logs/
+tmp/
+*.pid
+*.seed
+
+# ── Go ────────────────────────────────────────────────────────────────
+backend/bin/
+backend/dist/
+backend/**/coverage.out
+backend/**/coverage.html
+*.test
+*.out
+
+# ── Node / frontend ───────────────────────────────────────────────────
+node_modules/
+web/dist/
+web/.vite/
+web/.turbo/
+web/coverage/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# ── Python (legacy tooling) ───────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ── Docker / deployment artifacts ─────────────────────────────────────
+deploy/data/
+deploy/*.override.yaml
+
+# ── GeoIP / private data ──────────────────────────────────────────────
+config/geoip/*.mmdb
+*.mmdb
+
+# ── Local scratch files (private rulesets, checkpoints) ───────────────
+/surge.conf
+/*.conf
+trace_checkpoint.json
+
+# ── Claude Code runtime ───────────────────────────────────────────────
+.claude/

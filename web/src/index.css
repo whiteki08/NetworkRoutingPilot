@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-ink-900 text-slate-100;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl bg-ink-800 border border-ink-700 shadow-lg p-4;
+  }
+  .btn {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-cn2 text-ink-900 font-semibold hover:bg-cyan-300 transition;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-ink-700 text-slate-200 hover:bg-ink-700 transition;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+}
+
+.leaflet-container {
+  background-color: #0b1220;
+}
